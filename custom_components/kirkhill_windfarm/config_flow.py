@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from datetime import date
 from typing import Any
@@ -8,19 +10,44 @@ import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    API_BASE_URL,
     CONF_API_TOKEN,
     CONF_EFFECTIVE_FROM,
     CONF_INCOME_RATES,
     CONF_RATE_PER_KWH,
     DOMAIN,
 )
-from .coordinator import KirkhillCoordinator
 
+_LOGGER = logging.getLogger(__name__)
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+async def _validate_api_token(hass: HomeAssistant, token: str) -> bool | None:
+    """Check whether the token is accepted by the API.
+
+    Returns True (2xx), False (401/403), or None (unreachable / unexpected error).
+    Any exception is logged at DEBUG so the HA log reveals the root cause.
+    """
+    session = async_get_clientsession(hass)
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    try:
+        async with asyncio.timeout(15):
+            async with session.get(
+                f"{API_BASE_URL}/api/v1/generation?range=7d",
+                headers=headers,
+            ) as resp:
+                if resp.status in (401, 403):
+                    return False
+                resp.raise_for_status()
+                return True
+    except Exception:  # pylint: disable=broad-except
+        _LOGGER.debug("Kirk Hill API token validation error", exc_info=True)
+        return None
 
 
 def _validate_date(value: str) -> str:
@@ -52,17 +79,14 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            coordinator = KirkhillCoordinator(self.hass, user_input[CONF_API_TOKEN])
-            try:
-                valid = await coordinator.async_validate_api_token()
-            except (aiohttp.ClientError, TimeoutError):
+            result = await _validate_api_token(self.hass, user_input[CONF_API_TOKEN])
+            if result is None:
                 errors["base"] = "cannot_connect"
+            elif result is False:
+                errors["base"] = "invalid_auth"
             else:
-                if valid:
-                    self._api_token = user_input[CONF_API_TOKEN]
-                    return await self.async_step_income_rate()
-                else:
-                    errors["base"] = "invalid_auth"
+                self._api_token = user_input[CONF_API_TOKEN]
+                return await self.async_step_income_rate()
 
         return self.async_show_form(
             step_id="user",
