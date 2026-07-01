@@ -69,8 +69,7 @@
       "owner_share": {"name": "Ownership Share"},
       "owner_revenue_today": {"name": "Revenue Today"},
       "owner_revenue_7d": {"name": "Revenue (7 days)"},
-      "active_income_rate": {"name": "Active Income Rate"},
-      "turbine_availability": {"name": "Availability"}
+      "active_income_rate": {"name": "Active Income Rate"}
     }
   }
 }

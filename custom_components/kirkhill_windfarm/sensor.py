@@ -135,7 +135,6 @@ async def async_setup_entry(
                 TurbineGenerationTodaySensor(coordinator, entry, turbine),
                 TurbineStatusSensor(coordinator, entry, turbine),
                 TurbineCapacityFactorSensor(coordinator, entry, turbine),
-                TurbineAvailabilitySensor(coordinator, entry, turbine),
             ])
 
     async_add_entities(entities)
@@ -574,8 +573,6 @@ class TurbineGenerationTodaySensor(_TurbineBase):
 
 class TurbineStatusSensor(_TurbineBase):
     _attr_name = "Status"
-    _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["running", "stopped"]
     _attr_icon = "mdi:wind-turbine"
 
     def __init__(
@@ -589,7 +586,9 @@ class TurbineStatusSensor(_TurbineBase):
 
     @property
     def native_value(self) -> str | None:
-        status = self._turbine_data().get("status")
+        t = self._turbine_data()
+        # API returns current_status; fall back to status for compatibility
+        status = t.get("current_status") or t.get("status")
         if status is None:
             return None
         return str(status).lower()
@@ -616,22 +615,3 @@ class TurbineCapacityFactorSensor(_TurbineBase):
         return round(float(val), 2) if val is not None else None
 
 
-class TurbineAvailabilitySensor(_TurbineBase):
-    _attr_name = "Availability"
-    _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:clock-check"
-
-    def __init__(
-        self,
-        coordinator: KirkhillCoordinator,
-        entry: ConfigEntry,
-        turbine: dict[str, Any],
-    ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
-        super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_availability")
-
-    @property
-    def native_value(self) -> float | None:
-        val = self._turbine_data().get("availability_pct")
-        return round(float(val), 2) if val is not None else None

@@ -52,9 +52,8 @@ Sensors are grouped into separate HA devices so each device page shows a focused
 | Sensor | Unit | Description |
 |---|---|---|
 | Generation Today | kWh | Generation for this turbine since midnight |
-| Status | — | `running` or `stopped` |
+| Status | — | Current operational status (e.g. `active`) |
 | Capacity Factor | % | Actual output as a percentage of rated peak capacity |
-| Availability | % | Percentage of time the turbine was operational (excludes planned/unplanned downtime) |
 
 ---
 

@@ -4,6 +4,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_API_TOKEN, DOMAIN, PLATFORMS
@@ -31,6 +32,17 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
                 registry.async_remove(entity.entity_id)
 
         hass.config_entries.async_update_entry(config_entry, version=2)
+
+    if config_entry.version < 3:
+        # v2 → v3: sensors split across per-device DeviceInfo (site / owner / turbines).
+        # The old single device used a hard-coded identifier; remove it so the
+        # now-empty device doesn't linger in the device registry.
+        dev_reg = dr.async_get(hass)
+        stale = dev_reg.async_get_device(identifiers={(DOMAIN, "kirkhill_wind_farm")})
+        if stale is not None:
+            dev_reg.async_remove_device(stale.id)
+
+        hass.config_entries.async_update_entry(config_entry, version=3)
 
     return True
 
