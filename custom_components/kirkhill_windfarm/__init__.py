@@ -44,6 +44,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         hass.config_entries.async_update_entry(config_entry, version=3)
 
+    if config_entry.version < 4:
+        # v3 → v4: TurbineAvailabilitySensor removed (field not in API).
+        # Remove stale availability entities from the entity registry.
+        registry = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+            uid = entity.unique_id or ""
+            if "_turbine_" in uid and uid.endswith("_availability"):
+                _LOGGER.debug("Removing stale turbine entity: %s", entity.entity_id)
+                registry.async_remove(entity.entity_id)
+
+        hass.config_entries.async_update_entry(config_entry, version=4)
+
     return True
 
 
