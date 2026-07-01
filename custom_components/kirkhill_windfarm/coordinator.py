@@ -232,19 +232,19 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Derive instantaneous power from the most recent 10-min interval.
         # kWh over 10 min × 6 intervals/hour → average kW for that interval.
-        site_series: list[dict] = site.get("series", [])
-        current_power_kw: float | None = None
-        if site_series:
-            last_kwh = site_series[-1].get("generation_kwh")
-            if last_kwh is not None:
-                current_power_kw = round(float(last_kwh) * 6, 2)
+        def _last_interval_kw(series: list[dict]) -> float | None:
+            if not series:
+                return None
+            last_kwh = series[-1].get("generation_kwh")
+            return round(float(last_kwh) * 6, 2) if last_kwh is not None else None
 
         return {
             "owner": owner,
             "site": site,
             "wind_speed": ws,
             "turbines": tb,
-            "current_power_kw": current_power_kw,
+            "current_power_kw": _last_interval_kw(site.get("series", [])),
+            "current_owner_power_kw": _last_interval_kw(owner.get("series", [])),
         }
 
     # ------------------------------------------------------------------

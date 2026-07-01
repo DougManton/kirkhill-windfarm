@@ -8,11 +8,11 @@ A HACS-compatible custom integration that connects Home Assistant to the [Kirk H
 
 ## Features
 
-- **Site performance** — 7-day generation, instantaneous power output, capacity factor, active turbine count
+- **Site performance** — 7-day generation, instantaneous site and owner power output, capacity factor, active turbine count
 - **Wind data** — current and daily-average wind speed
 - **Per-turbine generation** — 30-day output per turbine, added automatically from the API
-- **Owner share** — your generation figures are returned directly by the API (scoped to your account); no share percentage needs to be entered
-- **Income tracking** — estimated income from your generation using a configurable £/kWh rate
+- **Owner share** — your generation and power figures are returned directly by the API (scoped to your account); no share percentage needs to be entered
+- **Income tracking** — optional; estimated income from your generation using a configurable £/kWh rate
 - **Rate history** — multiple income rates each with an effective date; the correct rate is applied automatically to each measurement period
 
 ---
@@ -21,15 +21,16 @@ A HACS-compatible custom integration that connects Home Assistant to the [Kirk H
 
 | Sensor | Unit | Description |
 |---|---|---|
-| My Generation (7 days) | kWh | Your share of generation for the last 7 days (API-scoped to your account) |
+| Your Generation (7 days) | kWh | Your share of generation for the last 7 days (API-scoped to your account) |
 | Site Generation (7 days) | kWh | Total generation across the whole farm for the last 7 days |
-| Current Power Output | kW | Instantaneous site power, derived from the most recent 10-minute interval |
-| Capacity Factor | % | Ratio of actual output to rated capacity |
+| Your Power | kW | Your instantaneous power output, derived from the most recent 10-minute interval |
+| Site Power | kW | Instantaneous site-wide power output, derived from the most recent 10-minute interval |
+| Capacity Factor | % | Ratio of actual site output to rated capacity |
 | Active Turbines | — | Number of turbines currently generating |
-| Wind Speed | m/s | Most recent wind speed reading |
-| Average Wind Speed (today) | m/s | Day-average wind speed |
-| My Revenue (7 days) | £ | Estimated income from your 7-day generation at the applicable rate |
-| Active Income Rate | £/kWh | Rate currently in use; full rate history exposed as the `rate_history` attribute |
+| Wind Speed | m/s | Most recent 1-minute wind speed reading |
+| Average Wind Speed (today) | m/s | Mean of all 1-minute wind speed readings since midnight |
+| Your Revenue (7 days) | £ | Estimated income from your 7-day generation at the applicable rate *(only shown when income rates are configured)* |
+| Active Income Rate | £/kWh | Rate currently in use; full rate history exposed as the `rate_history` attribute *(only shown when income rates are configured)* |
 | Turbine *N* Generation (30 days) | kWh | One sensor per turbine, created dynamically on first data fetch |
 
 ---
@@ -55,9 +56,9 @@ Go to **Settings → Devices & Services → Add Integration** and search for **K
 
 Generate a token from your dashboard at `dashboard.kirkhillcoop.org`. The dashboard API returns data already scoped to your ownership share, so no share percentage is required here.
 
-### Step 2 — Income rate
+### Step 2 — Income rate (optional)
 
-Enter the rate (£ per kWh) you receive on generation income and the date from which it applies. At least one rate entry is required.
+Optionally enter the rate (£ per kWh) you receive on generation income and the date from which it applies. Leave the rate field blank to skip — income tracking can be configured at any time via the integration's **Configure** button. The **Your Revenue** and **Active Income Rate** sensors only appear once at least one rate is configured.
 
 ### Managing income rates
 
@@ -65,7 +66,7 @@ Rates can change over time (e.g. contract renewals). To add or remove entries:
 
 1. Go to **Settings → Devices & Services → Kirk Hill Wind Farm → Configure**.
 2. Choose **Add income rate** and enter the effective date and new rate.
-3. The **My Revenue (7 days)** sensor automatically uses the rate that was active at the start of the 7-day window.
+3. The **Your Revenue (7 days)** sensor automatically uses the rate that was active at the start of the 7-day window.
 
 The **Active Income Rate** sensor's `rate_history` attribute lists the full chronological rate table, which can be used in HA templates or the Energy dashboard.
 

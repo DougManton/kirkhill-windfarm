@@ -54,14 +54,15 @@
   },
   "entity": {
     "sensor": {
-      "owner_generation_7d": {"name": "My Generation (7 days)"},
+      "owner_generation_7d": {"name": "Your Generation (7 days)"},
       "site_generation_7d": {"name": "Site Generation (7 days)"},
-      "current_power": {"name": "Current Power Output"},
+      "owner_power": {"name": "Your Power"},
+      "current_power": {"name": "Site Power"},
       "capacity_factor": {"name": "Capacity Factor"},
       "active_turbines": {"name": "Active Turbines"},
       "wind_speed_current": {"name": "Wind Speed"},
       "wind_speed_average": {"name": "Average Wind Speed (today)"},
-      "owner_revenue_7d": {"name": "My Revenue (7 days)"},
+      "owner_revenue_7d": {"name": "Your Revenue (7 days)"},
       "active_income_rate": {"name": "Active Income Rate"}
     }
   }

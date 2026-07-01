@@ -1,7 +1,7 @@
 {
   "domain": "kirkhill_windfarm",
   "name": "Kirk Hill Wind Farm",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "documentation": "https://github.com/DougManton/kirkhill-windfarm",
   "issue_tracker": "https://github.com/DougManton/kirkhill-windfarm/issues",
   "codeowners": ["@DougManton"],

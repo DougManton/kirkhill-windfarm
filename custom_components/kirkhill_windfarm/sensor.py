@@ -83,6 +83,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [
         OwnerGenerationSensor(coordinator, entry),
         SiteGenerationSensor(coordinator, entry),
+        OwnerPowerSensor(coordinator, entry),
         CurrentPowerSensor(coordinator, entry),
         CapacityFactorSensor(coordinator, entry),
         ActiveTurbinesSensor(coordinator, entry),
@@ -145,7 +146,7 @@ class OwnerGenerationSensor(KirkhillSensorBase):
     The API returns owner-scoped data automatically; no local share calculation needed.
     """
 
-    _attr_name = "My Generation (7 days)"
+    _attr_name = "Your Generation (7 days)"
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -183,10 +184,27 @@ class SiteGenerationSensor(KirkhillSensorBase):
 # ---------------------------------------------------------------------------
 
 
+class OwnerPowerSensor(KirkhillSensorBase):
+    """Instantaneous owner power (kW), derived from the latest 10-min interval."""
+
+    _attr_name = "Your Power"
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:account-arrow-right"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_power")
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("current_owner_power_kw")
+
+
 class CurrentPowerSensor(KirkhillSensorBase):
     """Instantaneous site power output (kW), derived from the latest 10-min interval."""
 
-    _attr_name = "Current Power Output"
+    _attr_name = "Site Power"
     _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
     _attr_device_class = SensorDeviceClass.POWER
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -306,7 +324,7 @@ class WindSpeedAverageSensor(KirkhillSensorBase):
 class OwnerRevenueSensor(KirkhillSensorBase):
     """Estimated income from the owner's 7-day generation share (£)."""
 
-    _attr_name = "My Revenue (7 days)"
+    _attr_name = "Your Revenue (7 days)"
     _attr_native_unit_of_measurement = _GBP
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
