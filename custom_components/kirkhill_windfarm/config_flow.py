@@ -55,7 +55,7 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             coordinator = KirkhillCoordinator(self.hass, user_input[CONF_API_TOKEN])
             try:
                 valid = await coordinator.async_validate_api_token()
-            except aiohttp.ClientError:
+            except (aiohttp.ClientError, TimeoutError):
                 errors["base"] = "cannot_connect"
             else:
                 if valid:
