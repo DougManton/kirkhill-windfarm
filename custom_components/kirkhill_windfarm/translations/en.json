@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Kirk Hill Wind Farm",
+        "description": "Enter the API token from your dashboard at dashboard.kirkhillcoop.org.",
+        "data": {
+          "api_token": "API Token"
+        }
+      },
+      "income_rate": {
+        "title": "Income Rate",
+        "description": "Enter the income rate you receive per kWh generated and the date from which it applies. You can add or change rates later via Configure.",
+        "data": {
+          "rate_per_kwh": "Income rate (£ per kWh)",
+          "effective_from": "Effective from (YYYY-MM-DD)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to reach the Kirk Hill dashboard. Check your network connection.",
+      "invalid_auth": "Invalid API token. Generate a new key from your dashboard."
+    },
+    "abort": {
+      "already_configured": "Kirk Hill Wind Farm is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kirk Hill Wind Farm Options",
+        "menu_options": {
+          "add_rate": "Add income rate",
+          "remove_rate": "Remove income rate"
+        }
+      },
+      "add_rate": {
+        "title": "Add Income Rate",
+        "description": "Add a new income rate. If a rate already exists for this date it will be replaced.",
+        "data": {
+          "effective_from": "Effective from (YYYY-MM-DD)",
+          "rate_per_kwh": "Income rate (£ per kWh)"
+        }
+      },
+      "remove_rate": {
+        "title": "Remove Income Rate",
+        "data": {
+          "rate_entry": "Select rate to remove"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "owner_generation_7d": {"name": "My Generation (7 days)"},
+      "site_generation_7d": {"name": "Site Generation (7 days)"},
+      "current_power": {"name": "Current Power Output"},
+      "capacity_factor": {"name": "Capacity Factor"},
+      "active_turbines": {"name": "Active Turbines"},
+      "wind_speed_current": {"name": "Wind Speed"},
+      "wind_speed_average": {"name": "Average Wind Speed (today)"},
+      "owner_revenue_7d": {"name": "My Revenue (7 days)"},
+      "active_income_rate": {"name": "Active Income Rate"}
+    }
+  }
+}

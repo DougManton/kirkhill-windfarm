@@ -1,0 +1,13 @@
+{
+  "domain": "kirkhill_windfarm",
+  "name": "Kirk Hill Wind Farm",
+  "version": "1.0.0",
+  "documentation": "https://github.com/DougManton/kirkhill-windfarm",
+  "issue_tracker": "https://github.com/DougManton/kirkhill-windfarm/issues",
+  "codeowners": ["@DougManton"],
+  "requirements": [],
+  "dependencies": [],
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "homeassistant": "2024.1.0"
+}

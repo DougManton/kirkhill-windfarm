@@ -1,0 +1,416 @@
+from __future__ import annotations
+
+import logging
+from datetime import date, timedelta
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfSpeed,
+)
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import (
+    CONF_EFFECTIVE_FROM,
+    CONF_INCOME_RATES,
+    CONF_RATE_PER_KWH,
+    DOMAIN,
+)
+from .coordinator import KirkhillCoordinator
+
+_LOGGER = logging.getLogger(__name__)
+
+try:
+    from homeassistant.const import CURRENCY_POUND  # type: ignore[attr-defined]
+
+    _GBP = CURRENCY_POUND
+except ImportError:
+    _GBP = "GBP"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def get_applicable_rate(
+    income_rates: list[dict], target_date: date
+) -> float | None:
+    """Return the income rate (£/kWh) active on target_date, or None."""
+    applicable: dict | None = None
+    for rate in sorted(income_rates, key=lambda r: r[CONF_EFFECTIVE_FROM]):
+        try:
+            if date.fromisoformat(rate[CONF_EFFECTIVE_FROM]) <= target_date:
+                applicable = rate
+        except (KeyError, ValueError):
+            continue
+    return applicable[CONF_RATE_PER_KWH] if applicable is not None else None
+
+
+def _device_info() -> DeviceInfo:
+    return DeviceInfo(
+        identifiers={(DOMAIN, "kirkhill_wind_farm")},
+        name="Kirk Hill Wind Farm",
+        manufacturer="Kirk Hill Community Co-op",
+        model="Wind Farm Dashboard",
+        configuration_url="https://dashboard.kirkhillcoop.org",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Platform setup
+# ---------------------------------------------------------------------------
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    coordinator: KirkhillCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    entities: list[SensorEntity] = [
+        OwnerGenerationSensor(coordinator, entry),
+        SiteGenerationSensor(coordinator, entry),
+        CurrentPowerSensor(coordinator, entry),
+        CapacityFactorSensor(coordinator, entry),
+        ActiveTurbinesSensor(coordinator, entry),
+        WindSpeedCurrentSensor(coordinator, entry),
+        WindSpeedAverageSensor(coordinator, entry),
+        OwnerRevenueSensor(coordinator, entry),
+        ActiveIncomeSensor(coordinator, entry),
+    ]
+
+    # Add per-turbine sensors if data is ready
+    if coordinator.data:
+        for turbine in coordinator.data.get("turbines", {}).get("turbines", []):
+            entities.append(TurbineGenerationSensor(coordinator, entry, turbine))
+
+    async_add_entities(entities)
+
+
+# ---------------------------------------------------------------------------
+# Base class
+# ---------------------------------------------------------------------------
+
+
+class KirkhillSensorBase(CoordinatorEntity[KirkhillCoordinator], SensorEntity):
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        unique_suffix: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{unique_suffix}"
+        self._attr_device_info = _device_info()
+        self._entry = entry
+
+    @property
+    def _income_rates(self) -> list[dict]:
+        return self._entry.options.get(CONF_INCOME_RATES, [])
+
+    def _owner_summary(self) -> dict:
+        return (self.coordinator.data or {}).get("owner", {}).get("summary", {})
+
+    def _site_summary(self) -> dict:
+        return (self.coordinator.data or {}).get("site", {}).get("summary", {})
+
+
+# ---------------------------------------------------------------------------
+# Generation sensors
+# ---------------------------------------------------------------------------
+
+
+class OwnerGenerationSensor(KirkhillSensorBase):
+    """Owner's share of site generation over the last 7 days (kWh).
+
+    The API returns owner-scoped data automatically; no local share calculation needed.
+    """
+
+    _attr_name = "My Generation (7 days)"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:account-circle"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_generation_7d")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._owner_summary().get("total_generation_kwh")
+        return round(float(val), 3) if val is not None else None
+
+
+class SiteGenerationSensor(KirkhillSensorBase):
+    """Total site generation over the last 7 days (kWh)."""
+
+    _attr_name = "Site Generation (7 days)"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:wind-turbine"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "site_generation_7d")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._site_summary().get("total_generation_kwh")
+        return round(float(val), 1) if val is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Site performance sensors
+# ---------------------------------------------------------------------------
+
+
+class CurrentPowerSensor(KirkhillSensorBase):
+    """Instantaneous site power output (kW), derived from the latest 10-min interval."""
+
+    _attr_name = "Current Power Output"
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:lightning-bolt"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "current_power")
+
+    @property
+    def native_value(self) -> float | None:
+        return (self.coordinator.data or {}).get("current_power_kw")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        site = self._site_summary()
+        attrs: dict[str, Any] = {}
+        if "latest_generation_interval_end" in site:
+            attrs["latest_interval_end"] = site["latest_generation_interval_end"]
+        if "latest_import_status" in site:
+            attrs["import_status"] = site["latest_import_status"]
+        return attrs
+
+
+class CapacityFactorSensor(KirkhillSensorBase):
+    """Site capacity factor (%)."""
+
+    _attr_name = "Capacity Factor"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:percent"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "capacity_factor")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._site_summary().get("capacity_factor_percent")
+        return round(float(val), 2) if val is not None else None
+
+
+class ActiveTurbinesSensor(KirkhillSensorBase):
+    """Number of turbines currently active."""
+
+    _attr_name = "Active Turbines"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:wind-turbine-check"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "active_turbines")
+
+    @property
+    def native_value(self) -> int | None:
+        val = self._site_summary().get("active_turbines")
+        return int(val) if val is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        site = self._site_summary()
+        attrs: dict[str, Any] = {}
+        if "site_capacity_watts" in site:
+            attrs["site_capacity_kw"] = round(
+                float(site["site_capacity_watts"]) / 1000, 0
+            )
+        return attrs
+
+
+# ---------------------------------------------------------------------------
+# Wind speed sensors
+# ---------------------------------------------------------------------------
+
+
+class WindSpeedCurrentSensor(KirkhillSensorBase):
+    """Current wind speed (m/s)."""
+
+    _attr_name = "Wind Speed"
+    _attr_native_unit_of_measurement = UnitOfSpeed.METERS_PER_SECOND
+    _attr_device_class = SensorDeviceClass.WIND_SPEED
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "wind_speed_current")
+
+    def _ws(self) -> dict:
+        data = self.coordinator.data or {}
+        ws = data.get("wind_speed", {})
+        # May be at root or nested under "summary"
+        return ws.get("summary", ws)
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._ws().get("current_ms")
+        return round(float(val), 1) if val is not None else None
+
+
+class WindSpeedAverageSensor(KirkhillSensorBase):
+    """Average wind speed today (m/s)."""
+
+    _attr_name = "Average Wind Speed (today)"
+    _attr_native_unit_of_measurement = UnitOfSpeed.METERS_PER_SECOND
+    _attr_device_class = SensorDeviceClass.WIND_SPEED
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "wind_speed_average")
+
+    def _ws(self) -> dict:
+        data = self.coordinator.data or {}
+        ws = data.get("wind_speed", {})
+        return ws.get("summary", ws)
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._ws().get("average_ms")
+        return round(float(val), 1) if val is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Revenue sensors
+# ---------------------------------------------------------------------------
+
+
+class OwnerRevenueSensor(KirkhillSensorBase):
+    """Estimated income from the owner's 7-day generation share (£)."""
+
+    _attr_name = "My Revenue (7 days)"
+    _attr_native_unit_of_measurement = _GBP
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:cash"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_revenue_7d")
+
+    @property
+    def native_value(self) -> float | None:
+        owner_kwh = self._owner_summary().get("total_generation_kwh")
+        if owner_kwh is None:
+            return None
+        # Use the rate active at the start of the 7-day window
+        period_start = date.today() - timedelta(days=7)
+        rate = get_applicable_rate(self._income_rates, period_start)
+        if rate is None:
+            return None
+        return round(float(owner_kwh) * rate, 4)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        period_start = date.today() - timedelta(days=7)
+        rate = get_applicable_rate(self._income_rates, period_start)
+        return {
+            "income_rate_per_kwh": rate,
+            "period_start": period_start.isoformat(),
+        }
+
+
+class ActiveIncomeSensor(KirkhillSensorBase):
+    """The income rate (£/kWh) currently in effect."""
+
+    _attr_name = "Active Income Rate"
+    _attr_native_unit_of_measurement = f"{_GBP}/kWh"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:currency-gbp"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "active_income_rate")
+
+    @property
+    def native_value(self) -> float | None:
+        return get_applicable_rate(self._income_rates, date.today())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        rates = sorted(self._income_rates, key=lambda r: r[CONF_EFFECTIVE_FROM])
+        return {
+            "rate_history": [
+                {
+                    "effective_from": r[CONF_EFFECTIVE_FROM],
+                    "rate_per_kwh": r[CONF_RATE_PER_KWH],
+                }
+                for r in rates
+            ]
+        }
+
+
+# ---------------------------------------------------------------------------
+# Per-turbine sensors
+# ---------------------------------------------------------------------------
+
+
+class TurbineGenerationSensor(KirkhillSensorBase):
+    """Generation for a single turbine over the last 30 days (kWh)."""
+
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:wind-turbine"
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        turbine: dict[str, Any],
+    ) -> None:
+        turbine_id = str(turbine.get("id", "unknown"))
+        super().__init__(coordinator, entry, f"turbine_{turbine_id}_generation")
+        self._turbine_id = turbine_id
+        self._attr_name = f"{turbine.get('name', f'Turbine {turbine_id}')} Generation (30 days)"
+
+    def _turbine_data(self) -> dict[str, Any]:
+        turbines = (
+            (self.coordinator.data or {}).get("turbines", {}).get("turbines", [])
+        )
+        for t in turbines:
+            if str(t.get("id")) == self._turbine_id:
+                return t
+        return {}
+
+    @property
+    def native_value(self) -> float | None:
+        t = self._turbine_data()
+        val = t.get("generation_kwh")
+        return round(float(val), 2) if val is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        t = self._turbine_data()
+        return {
+            k: t[k]
+            for k in ("status", "availability_pct", "capacity_kw")
+            if k in t
+        }
