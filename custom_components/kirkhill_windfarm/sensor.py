@@ -310,7 +310,7 @@ class OwnerRevenueSensor(KirkhillSensorBase):
     _attr_name = "My Revenue (7 days)"
     _attr_native_unit_of_measurement = _GBP
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:cash"
 
     def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
