@@ -69,7 +69,8 @@
       "wind_speed_average": {"name": "Average Wind Speed (today)"},
       "owner_revenue_today": {"name": "Your Revenue Today"},
       "owner_revenue_7d": {"name": "Your Revenue (7 days)"},
-      "active_income_rate": {"name": "Active Income Rate"}
+      "active_income_rate": {"name": "Active Income Rate"},
+      "turbine_availability": {"name": "Turbine Availability"}
     }
   }
 }

@@ -61,7 +61,8 @@ A HACS-compatible custom integration that connects Home Assistant to the [Kirk H
 |---|---|---|
 | Turbine *N* Generation Today | kWh | Generation for this turbine since midnight |
 | Turbine *N* Status | — | `running` or `stopped` |
-| Turbine *N* Capacity Factor | % | Capacity factor for this turbine |
+| Turbine *N* Capacity Factor | % | Actual output as a percentage of rated peak capacity |
+| Turbine *N* Availability | % | Percentage of time the turbine was operational (excludes planned/unplanned downtime) |
 
 ---
 
