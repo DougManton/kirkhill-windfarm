@@ -88,9 +88,13 @@ async def async_setup_entry(
         ActiveTurbinesSensor(coordinator, entry),
         WindSpeedCurrentSensor(coordinator, entry),
         WindSpeedAverageSensor(coordinator, entry),
-        OwnerRevenueSensor(coordinator, entry),
-        ActiveIncomeSensor(coordinator, entry),
     ]
+
+    if entry.options.get(CONF_INCOME_RATES):
+        entities.extend([
+            OwnerRevenueSensor(coordinator, entry),
+            ActiveIncomeSensor(coordinator, entry),
+        ])
 
     # Add per-turbine sensors if data is ready
     if coordinator.data:

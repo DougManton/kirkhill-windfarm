@@ -9,8 +9,8 @@
         }
       },
       "income_rate": {
-        "title": "Income Rate",
-        "description": "Enter the income rate you receive per kWh generated and the date from which it applies. You can add or change rates later via Configure.",
+        "title": "Income Rate (optional)",
+        "description": "Optionally enter the rate you receive per kWh and the date it applies from. Leave the rate blank to skip — you can configure income tracking later via the integration's Configure button.",
         "data": {
           "rate_per_kwh": "Income rate (£ per kWh)",
           "effective_from": "Effective from (YYYY-MM-DD)"
@@ -20,7 +20,8 @@
     "error": {
       "cannot_connect": "Unable to reach the Kirk Hill dashboard. Check your network connection.",
       "invalid_auth": "Invalid API token. Generate a new key from your dashboard.",
-      "invalid_date": "Date must be in YYYY-MM-DD format."
+      "invalid_date": "Date must be in YYYY-MM-DD format.",
+      "invalid_rate": "Income rate must be a positive number."
     },
     "abort": {
       "already_configured": "Kirk Hill Wind Farm is already configured."

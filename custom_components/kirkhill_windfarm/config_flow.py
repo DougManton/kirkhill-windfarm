@@ -97,14 +97,28 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_income_rate(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 2: set the opening income rate."""
+        """Step 2: optionally set an opening income rate."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            rate_str = (user_input.get(CONF_RATE_PER_KWH) or "").strip()
+            if not rate_str:
+                # User left rate blank — skip income tracking entirely
+                return self.async_create_entry(
+                    title="Kirk Hill Wind Farm",
+                    data={CONF_API_TOKEN: self._api_token},
+                    options={CONF_INCOME_RATES: []},
+                )
+            try:
+                rate = float(rate_str)
+                if rate < 0:
+                    raise ValueError
+            except ValueError:
+                errors[CONF_RATE_PER_KWH] = "invalid_rate"
             try:
                 _validate_date(user_input[CONF_EFFECTIVE_FROM])
             except vol.Invalid:
                 errors[CONF_EFFECTIVE_FROM] = "invalid_date"
-            else:
+            if not errors:
                 return self.async_create_entry(
                     title="Kirk Hill Wind Farm",
                     data={CONF_API_TOKEN: self._api_token},
@@ -112,7 +126,7 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_INCOME_RATES: [
                             {
                                 CONF_EFFECTIVE_FROM: user_input[CONF_EFFECTIVE_FROM],
-                                CONF_RATE_PER_KWH: user_input[CONF_RATE_PER_KWH],
+                                CONF_RATE_PER_KWH: rate,
                             }
                         ]
                     },
@@ -122,10 +136,8 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="income_rate",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_RATE_PER_KWH): vol.All(
-                        vol.Coerce(float), vol.Range(min=0.0)
-                    ),
-                    vol.Required(
+                    vol.Optional(CONF_RATE_PER_KWH): str,
+                    vol.Optional(
                         CONF_EFFECTIVE_FROM, default=date.today().isoformat()
                     ): str,
                 }
