@@ -255,7 +255,7 @@ class ActiveTurbinesSensor(KirkhillSensorBase):
 
 
 class WindSpeedCurrentSensor(KirkhillSensorBase):
-    """Current wind speed (m/s)."""
+    """Current wind speed — most recent 1-minute reading in the series."""
 
     _attr_name = "Wind Speed"
     _attr_native_unit_of_measurement = UnitOfSpeed.METERS_PER_SECOND
@@ -265,20 +265,17 @@ class WindSpeedCurrentSensor(KirkhillSensorBase):
     def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "wind_speed_current")
 
-    def _ws(self) -> dict:
-        data = self.coordinator.data or {}
-        ws = data.get("wind_speed", {})
-        # May be at root or nested under "summary"
-        return ws.get("summary", ws)
-
     @property
     def native_value(self) -> float | None:
-        val = self._ws().get("current_ms")
-        return round(float(val), 1) if val is not None else None
+        series = (self.coordinator.data or {}).get("wind_speed", {}).get("series", [])
+        if not series:
+            return None
+        val = series[-1].get("wind_speed_mps")
+        return round(float(val), 2) if val is not None else None
 
 
 class WindSpeedAverageSensor(KirkhillSensorBase):
-    """Average wind speed today (m/s)."""
+    """Average wind speed today — mean of all 1-minute readings."""
 
     _attr_name = "Average Wind Speed (today)"
     _attr_native_unit_of_measurement = UnitOfSpeed.METERS_PER_SECOND
@@ -288,15 +285,13 @@ class WindSpeedAverageSensor(KirkhillSensorBase):
     def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry, "wind_speed_average")
 
-    def _ws(self) -> dict:
-        data = self.coordinator.data or {}
-        ws = data.get("wind_speed", {})
-        return ws.get("summary", ws)
-
     @property
     def native_value(self) -> float | None:
-        val = self._ws().get("average_ms")
-        return round(float(val), 1) if val is not None else None
+        series = (self.coordinator.data or {}).get("wind_speed", {}).get("series", [])
+        values = [e["wind_speed_mps"] for e in series if "wind_speed_mps" in e]
+        if not values:
+            return None
+        return round(sum(values) / len(values), 2)
 
 
 # ---------------------------------------------------------------------------
