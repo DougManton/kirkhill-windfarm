@@ -46,7 +46,7 @@ async def _validate_api_token(hass: HomeAssistant, token: str) -> bool | None:
                 resp.raise_for_status()
                 return True
     except Exception:  # pylint: disable=broad-except
-        _LOGGER.debug("Kirk Hill API token validation error", exc_info=True)
+        _LOGGER.warning("Kirk Hill API token validation error", exc_info=True)
         return None
 
 
