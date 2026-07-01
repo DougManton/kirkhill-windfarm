@@ -4,11 +4,35 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_API_TOKEN, DOMAIN, PLATFORMS
 from .coordinator import KirkhillCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate older config entry versions."""
+    _LOGGER.info(
+        "Migrating Kirk Hill Wind Farm entry from version %s", config_entry.version
+    )
+
+    if config_entry.version < 2:
+        # v1 → v2: per-turbine sensors changed from 30-day rolling to today.
+        # Old unique_id suffix: turbine_{id}_generation
+        # New unique_id suffix: turbine_{id}_generation_today
+        # Remove the old entities so they don't persist as orphans.
+        registry = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+            uid = entity.unique_id or ""
+            if "_turbine_" in uid and uid.endswith("_generation"):
+                _LOGGER.debug("Removing stale turbine entity: %s", entity.entity_id)
+                registry.async_remove(entity.entity_id)
+
+        hass.config_entries.async_update_entry(config_entry, version=2)
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

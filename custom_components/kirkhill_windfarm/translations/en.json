@@ -54,14 +54,20 @@
   },
   "entity": {
     "sensor": {
+      "owner_generation_today": {"name": "Your Generation Today"},
+      "site_generation_today": {"name": "Site Generation Today"},
       "owner_generation_7d": {"name": "Your Generation (7 days)"},
       "site_generation_7d": {"name": "Site Generation (7 days)"},
+      "owner_generation_30d": {"name": "Your Generation (30 days)"},
+      "site_generation_30d": {"name": "Site Generation (30 days)"},
       "owner_power": {"name": "Your Power"},
       "current_power": {"name": "Site Power"},
+      "owner_share": {"name": "Your Share"},
       "capacity_factor": {"name": "Capacity Factor"},
       "active_turbines": {"name": "Active Turbines"},
       "wind_speed_current": {"name": "Wind Speed"},
       "wind_speed_average": {"name": "Average Wind Speed (today)"},
+      "owner_revenue_today": {"name": "Your Revenue Today"},
       "owner_revenue_7d": {"name": "Your Revenue (7 days)"},
       "active_income_rate": {"name": "Active Income Rate"}
     }

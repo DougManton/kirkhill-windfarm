@@ -81,10 +81,15 @@ async def async_setup_entry(
     coordinator: KirkhillCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities: list[SensorEntity] = [
+        OwnerGenerationTodaySensor(coordinator, entry),
+        SiteGenerationTodaySensor(coordinator, entry),
         OwnerGenerationSensor(coordinator, entry),
         SiteGenerationSensor(coordinator, entry),
+        OwnerGeneration30dSensor(coordinator, entry),
+        SiteGeneration30dSensor(coordinator, entry),
         OwnerPowerSensor(coordinator, entry),
         CurrentPowerSensor(coordinator, entry),
+        OwnerShareSensor(coordinator, entry),
         CapacityFactorSensor(coordinator, entry),
         ActiveTurbinesSensor(coordinator, entry),
         WindSpeedCurrentSensor(coordinator, entry),
@@ -93,14 +98,18 @@ async def async_setup_entry(
 
     if entry.options.get(CONF_INCOME_RATES):
         entities.extend([
+            OwnerRevenueTodaySensor(coordinator, entry),
             OwnerRevenueSensor(coordinator, entry),
             ActiveIncomeSensor(coordinator, entry),
         ])
 
-    # Add per-turbine sensors if data is ready
     if coordinator.data:
         for turbine in coordinator.data.get("turbines", {}).get("turbines", []):
-            entities.append(TurbineGenerationSensor(coordinator, entry, turbine))
+            entities.extend([
+                TurbineGenerationTodaySensor(coordinator, entry, turbine),
+                TurbineStatusSensor(coordinator, entry, turbine),
+                TurbineCapacityFactorSensor(coordinator, entry, turbine),
+            ])
 
     async_add_entities(entities)
 
@@ -138,6 +147,78 @@ class KirkhillSensorBase(CoordinatorEntity[KirkhillCoordinator], SensorEntity):
 # ---------------------------------------------------------------------------
 # Generation sensors
 # ---------------------------------------------------------------------------
+
+
+class OwnerGenerationTodaySensor(KirkhillSensorBase):
+    """Owner's generation for the current calendar day (kWh)."""
+
+    _attr_name = "Your Generation Today"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:account-circle"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_generation_today")
+
+    @property
+    def native_value(self) -> float | None:
+        val = (self.coordinator.data or {}).get("owner_today", {}).get("summary", {}).get("total_generation_kwh")
+        return round(float(val), 3) if val is not None else None
+
+
+class SiteGenerationTodaySensor(KirkhillSensorBase):
+    """Total site generation for the current calendar day (kWh)."""
+
+    _attr_name = "Site Generation Today"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:wind-turbine"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "site_generation_today")
+
+    @property
+    def native_value(self) -> float | None:
+        val = (self.coordinator.data or {}).get("site_today", {}).get("summary", {}).get("total_generation_kwh")
+        return round(float(val), 1) if val is not None else None
+
+
+class OwnerGeneration30dSensor(KirkhillSensorBase):
+    """Owner's generation over the last 30 days (kWh)."""
+
+    _attr_name = "Your Generation (30 days)"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:account-circle"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_generation_30d")
+
+    @property
+    def native_value(self) -> float | None:
+        val = (self.coordinator.data or {}).get("owner_30d", {}).get("summary", {}).get("total_generation_kwh")
+        return round(float(val), 3) if val is not None else None
+
+
+class SiteGeneration30dSensor(KirkhillSensorBase):
+    """Total site generation over the last 30 days (kWh)."""
+
+    _attr_name = "Site Generation (30 days)"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:wind-turbine"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "site_generation_30d")
+
+    @property
+    def native_value(self) -> float | None:
+        val = (self.coordinator.data or {}).get("site_30d", {}).get("summary", {}).get("total_generation_kwh")
+        return round(float(val), 1) if val is not None else None
 
 
 class OwnerGenerationSensor(KirkhillSensorBase):
@@ -271,6 +352,27 @@ class ActiveTurbinesSensor(KirkhillSensorBase):
         return attrs
 
 
+class OwnerShareSensor(KirkhillSensorBase):
+    """Owner's proportional share of the wind farm (%)."""
+
+    _attr_name = "Your Share"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:percent-circle"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_share")
+
+    @property
+    def native_value(self) -> float | None:
+        data = self.coordinator.data or {}
+        owner_kwh = data.get("owner", {}).get("summary", {}).get("total_generation_kwh")
+        site_kwh = data.get("site", {}).get("summary", {}).get("total_generation_kwh")
+        if not owner_kwh or not site_kwh:
+            return None
+        return round(float(owner_kwh) / float(site_kwh) * 100, 4)
+
+
 # ---------------------------------------------------------------------------
 # Wind speed sensors
 # ---------------------------------------------------------------------------
@@ -319,6 +421,34 @@ class WindSpeedAverageSensor(KirkhillSensorBase):
 # ---------------------------------------------------------------------------
 # Revenue sensors
 # ---------------------------------------------------------------------------
+
+
+class OwnerRevenueTodaySensor(KirkhillSensorBase):
+    """Estimated income from the owner's generation today (£)."""
+
+    _attr_name = "Your Revenue Today"
+    _attr_native_unit_of_measurement = _GBP
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_icon = "mdi:cash"
+
+    def __init__(self, coordinator: KirkhillCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "owner_revenue_today")
+
+    @property
+    def native_value(self) -> float | None:
+        owner_kwh = (self.coordinator.data or {}).get("owner_today", {}).get("summary", {}).get("total_generation_kwh")
+        if owner_kwh is None:
+            return None
+        rate = get_applicable_rate(self._income_rates, date.today())
+        if rate is None:
+            return None
+        return round(float(owner_kwh) * rate, 4)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        rate = get_applicable_rate(self._income_rates, date.today())
+        return {"income_rate_per_kwh": rate, "period": date.today().isoformat()}
 
 
 class OwnerRevenueSensor(KirkhillSensorBase):
@@ -389,8 +519,29 @@ class ActiveIncomeSensor(KirkhillSensorBase):
 # ---------------------------------------------------------------------------
 
 
-class TurbineGenerationSensor(KirkhillSensorBase):
-    """Generation for a single turbine over the last 30 days (kWh)."""
+class _TurbineBase(KirkhillSensorBase):
+    """Shared base for per-turbine sensors."""
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        turbine: dict[str, Any],
+        unique_suffix: str,
+    ) -> None:
+        super().__init__(coordinator, entry, unique_suffix)
+        self._turbine_id = str(turbine.get("id", "unknown"))
+        self._turbine_label = turbine.get("name", f"Turbine {self._turbine_id}")
+
+    def _turbine_data(self) -> dict[str, Any]:
+        for t in (self.coordinator.data or {}).get("turbines", {}).get("turbines", []):
+            if str(t.get("id")) == self._turbine_id:
+                return t
+        return {}
+
+
+class TurbineGenerationTodaySensor(_TurbineBase):
+    """Generation for a single turbine for the current calendar day (kWh)."""
 
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_device_class = SensorDeviceClass.ENERGY
@@ -404,30 +555,64 @@ class TurbineGenerationSensor(KirkhillSensorBase):
         turbine: dict[str, Any],
     ) -> None:
         turbine_id = str(turbine.get("id", "unknown"))
-        super().__init__(coordinator, entry, f"turbine_{turbine_id}_generation")
-        self._turbine_id = turbine_id
-        self._attr_name = f"{turbine.get('name', f'Turbine {turbine_id}')} Generation (30 days)"
-
-    def _turbine_data(self) -> dict[str, Any]:
-        turbines = (
-            (self.coordinator.data or {}).get("turbines", {}).get("turbines", [])
-        )
-        for t in turbines:
-            if str(t.get("id")) == self._turbine_id:
-                return t
-        return {}
+        super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_generation_today")
+        self._attr_name = f"{self._turbine_label} Generation Today"
 
     @property
     def native_value(self) -> float | None:
-        t = self._turbine_data()
-        val = t.get("generation_kwh")
+        val = self._turbine_data().get("generation_kwh")
         return round(float(val), 2) if val is not None else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         t = self._turbine_data()
-        return {
-            k: t[k]
-            for k in ("status", "availability_pct", "capacity_kw")
-            if k in t
-        }
+        return {k: t[k] for k in ("share_percent", "latest_interval_end") if k in t}
+
+
+class TurbineStatusSensor(_TurbineBase):
+    """Running/stopped status for a single turbine."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["running", "stopped"]
+    _attr_icon = "mdi:wind-turbine"
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        turbine: dict[str, Any],
+    ) -> None:
+        turbine_id = str(turbine.get("id", "unknown"))
+        super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_status")
+        self._attr_name = f"{self._turbine_label} Status"
+
+    @property
+    def native_value(self) -> str | None:
+        status = self._turbine_data().get("status")
+        if status is None:
+            return None
+        return str(status).lower()
+
+
+class TurbineCapacityFactorSensor(_TurbineBase):
+    """Capacity factor for a single turbine (%)."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:gauge"
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        turbine: dict[str, Any],
+    ) -> None:
+        turbine_id = str(turbine.get("id", "unknown"))
+        super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_capacity_factor")
+        self._attr_name = f"{self._turbine_label} Capacity Factor"
+
+    @property
+    def native_value(self) -> float | None:
+        t = self._turbine_data()
+        val = t.get("capacity_factor_percent") or t.get("availability_pct")
+        return round(float(val), 2) if val is not None else None

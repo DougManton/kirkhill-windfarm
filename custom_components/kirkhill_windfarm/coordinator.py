@@ -176,11 +176,24 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._ratelimit_remaining = None
 
         session = async_get_clientsession(self.hass)
-        gen_owner, gen_site, wind_speed, turbines = await asyncio.gather(
+        (
+            gen_owner,
+            gen_site,
+            gen_owner_today,
+            gen_site_today,
+            gen_owner_30d,
+            gen_site_30d,
+            wind_speed,
+            turbines,
+        ) = await asyncio.gather(
             self._fetch_with_retry(session, "/api/v1/generation?range=7d"),
             self._fetch_with_retry(session, "/api/v1/generation?range=7d&scope=site"),
+            self._fetch_with_retry(session, "/api/v1/generation?range=today"),
+            self._fetch_with_retry(session, "/api/v1/generation?range=today&scope=site"),
+            self._fetch_with_retry(session, "/api/v1/generation?range=30d"),
+            self._fetch_with_retry(session, "/api/v1/generation?range=30d&scope=site"),
             self._fetch_with_retry(session, "/api/v1/wind-speed?range=today"),
-            self._fetch_with_retry(session, "/api/v1/turbines?range=30d"),
+            self._fetch_with_retry(session, "/api/v1/turbines?range=today"),
             return_exceptions=True,
         )
 
@@ -227,11 +240,14 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         owner = _unwrap(gen_owner, "generation (owner)")
         site = _unwrap(gen_site, "generation (site)")
+        owner_today = _unwrap(gen_owner_today, "generation today (owner)")
+        site_today = _unwrap(gen_site_today, "generation today (site)")
+        owner_30d = _unwrap(gen_owner_30d, "generation 30d (owner)")
+        site_30d = _unwrap(gen_site_30d, "generation 30d (site)")
         ws = _unwrap(wind_speed, "wind-speed")
         tb = _unwrap(turbines, "turbines")
 
-        # Derive instantaneous power from the most recent 10-min interval.
-        # kWh over 10 min × 6 intervals/hour → average kW for that interval.
+        # Derive instantaneous power: kWh over 10-min interval × 6 → kW.
         def _last_interval_kw(series: list[dict]) -> float | None:
             if not series:
                 return None
@@ -241,6 +257,10 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {
             "owner": owner,
             "site": site,
+            "owner_today": owner_today,
+            "site_today": site_today,
+            "owner_30d": owner_30d,
+            "site_30d": site_30d,
             "wind_speed": ws,
             "turbines": tb,
             "current_power_kw": _last_interval_kw(site.get("series", [])),

@@ -67,7 +67,7 @@ def _rate_label(rate: dict) -> str:
 class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Kirk Hill Wind Farm."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._api_token: str = ""
