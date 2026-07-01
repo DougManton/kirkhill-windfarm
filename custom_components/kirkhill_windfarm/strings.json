@@ -19,7 +19,8 @@
     },
     "error": {
       "cannot_connect": "Unable to reach the Kirk Hill dashboard. Check your network connection.",
-      "invalid_auth": "Invalid API token. Generate a new key from your dashboard."
+      "invalid_auth": "Invalid API token. Generate a new key from your dashboard.",
+      "invalid_date": "Date must be in YYYY-MM-DD format."
     },
     "abort": {
       "already_configured": "Kirk Hill Wind Farm is already configured."

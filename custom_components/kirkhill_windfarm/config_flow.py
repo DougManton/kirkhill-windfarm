@@ -98,19 +98,25 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Step 2: set the opening income rate."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(
-                title="Kirk Hill Wind Farm",
-                data={CONF_API_TOKEN: self._api_token},
-                options={
-                    CONF_INCOME_RATES: [
-                        {
-                            CONF_EFFECTIVE_FROM: user_input[CONF_EFFECTIVE_FROM],
-                            CONF_RATE_PER_KWH: user_input[CONF_RATE_PER_KWH],
-                        }
-                    ]
-                },
-            )
+            try:
+                _validate_date(user_input[CONF_EFFECTIVE_FROM])
+            except vol.Invalid:
+                errors[CONF_EFFECTIVE_FROM] = "invalid_date"
+            else:
+                return self.async_create_entry(
+                    title="Kirk Hill Wind Farm",
+                    data={CONF_API_TOKEN: self._api_token},
+                    options={
+                        CONF_INCOME_RATES: [
+                            {
+                                CONF_EFFECTIVE_FROM: user_input[CONF_EFFECTIVE_FROM],
+                                CONF_RATE_PER_KWH: user_input[CONF_RATE_PER_KWH],
+                            }
+                        ]
+                    },
+                )
 
         return self.async_show_form(
             step_id="income_rate",
@@ -121,9 +127,10 @@ class KirkhillConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Required(
                         CONF_EFFECTIVE_FROM, default=date.today().isoformat()
-                    ): _validate_date,
+                    ): str,
                 }
             ),
+            errors=errors,
         )
 
     @staticmethod
@@ -157,18 +164,23 @@ class KirkhillOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            new_entry = {
-                CONF_EFFECTIVE_FROM: user_input[CONF_EFFECTIVE_FROM],
-                CONF_RATE_PER_KWH: user_input[CONF_RATE_PER_KWH],
-            }
-            self._income_rates = [
-                r
-                for r in self._income_rates
-                if r[CONF_EFFECTIVE_FROM] != new_entry[CONF_EFFECTIVE_FROM]
-            ]
-            self._income_rates.append(new_entry)
-            self._income_rates.sort(key=lambda r: r[CONF_EFFECTIVE_FROM])
-            return self._save()
+            try:
+                _validate_date(user_input[CONF_EFFECTIVE_FROM])
+            except vol.Invalid:
+                errors[CONF_EFFECTIVE_FROM] = "invalid_date"
+            else:
+                new_entry = {
+                    CONF_EFFECTIVE_FROM: user_input[CONF_EFFECTIVE_FROM],
+                    CONF_RATE_PER_KWH: user_input[CONF_RATE_PER_KWH],
+                }
+                self._income_rates = [
+                    r
+                    for r in self._income_rates
+                    if r[CONF_EFFECTIVE_FROM] != new_entry[CONF_EFFECTIVE_FROM]
+                ]
+                self._income_rates.append(new_entry)
+                self._income_rates.sort(key=lambda r: r[CONF_EFFECTIVE_FROM])
+                return self._save()
 
         return self.async_show_form(
             step_id="add_rate",
@@ -176,7 +188,7 @@ class KirkhillOptionsFlow(config_entries.OptionsFlow):
                 {
                     vol.Required(
                         CONF_EFFECTIVE_FROM, default=date.today().isoformat()
-                    ): _validate_date,
+                    ): str,
                     vol.Required(CONF_RATE_PER_KWH): vol.All(
                         vol.Coerce(float), vol.Range(min=0.0)
                     ),
