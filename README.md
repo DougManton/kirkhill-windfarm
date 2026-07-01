@@ -8,61 +8,53 @@ A HACS-compatible custom integration that connects Home Assistant to the [Kirk H
 
 ## Features
 
-- **Site performance** — 7-day generation, instantaneous site and owner power output, capacity factor, active turbine count
-- **Wind data** — current and daily-average wind speed
-- **Per-turbine generation** — 30-day output per turbine, added automatically from the API
+- **Site performance** — today/7-day/30-day generation, instantaneous power, capacity factor, active turbine count, wind speed
 - **Owner share** — your generation and power figures are returned directly by the API (scoped to your account); no share percentage needs to be entered
+- **Per-turbine monitoring** — generation, status, capacity factor, and availability per turbine, added automatically from the API
 - **Income tracking** — optional; estimated income from your generation using a configurable £/kWh rate
 - **Rate history** — multiple income rates each with an effective date; the correct rate is applied automatically to each measurement period
+- **Organised by device** — sensors are split across three device types so each device page shows a focused set of sensors
 
 ---
 
-## Sensors
+## Devices and sensors
 
-### Generation
+Sensors are grouped into separate HA devices so each device page shows a focused set of related entities.
 
-| Sensor | Unit | Description |
-|---|---|---|
-| Your Generation Today | kWh | Your share of generation since midnight (resets daily) |
-| Site Generation Today | kWh | Total farm generation since midnight (resets daily) |
-| Your Generation (7 days) | kWh | Your share of generation over the last 7 days |
-| Site Generation (7 days) | kWh | Total farm generation over the last 7 days |
-| Your Generation (30 days) | kWh | Your share of generation over the last 30 days |
-| Site Generation (30 days) | kWh | Total farm generation over the last 30 days |
-
-### Power and performance
+### Kirk Hill Wind Farm *(site-wide metrics)*
 
 | Sensor | Unit | Description |
 |---|---|---|
-| Your Power | kW | Your instantaneous power output, derived from the most recent 10-minute interval |
-| Site Power | kW | Instantaneous site-wide power output, derived from the most recent 10-minute interval |
-| Your Share | % | Your proportional ownership of the farm, derived from 7-day generation ratio |
+| Generation Today | kWh | Total farm generation since midnight |
+| Generation (7 days) | kWh | Total farm generation over the last 7 days |
+| Generation (30 days) | kWh | Total farm generation over the last 30 days |
+| Power | kW | Instantaneous site-wide output, derived from the most recent 10-minute interval |
 | Capacity Factor | % | Ratio of actual site output to rated capacity |
 | Active Turbines | — | Number of turbines currently generating |
-
-### Wind
-
-| Sensor | Unit | Description |
-|---|---|---|
 | Wind Speed | m/s | Most recent 1-minute wind speed reading |
 | Average Wind Speed (today) | m/s | Mean of all 1-minute wind speed readings since midnight |
 
-### Income *(only shown when income rates are configured)*
+### Your Share *(owner-scoped metrics)*
 
 | Sensor | Unit | Description |
 |---|---|---|
-| Your Revenue Today | £ | Estimated income from today's generation at the applicable rate |
-| Your Revenue (7 days) | £ | Estimated income from your 7-day generation at the applicable rate |
-| Active Income Rate | £/kWh | Rate currently in use; full rate history in the `rate_history` attribute |
+| Generation Today | kWh | Your share of generation since midnight |
+| Generation (7 days) | kWh | Your share of generation over the last 7 days |
+| Generation (30 days) | kWh | Your share of generation over the last 30 days |
+| Power | kW | Your instantaneous output, derived from the most recent 10-minute interval |
+| Ownership Share | % | Your proportional ownership of the farm, derived from 7-day generation ratio |
+| Revenue Today | £ | Estimated income from today's generation *(only shown when rates are configured)* |
+| Revenue (7 days) | £ | Estimated income from your 7-day generation *(only shown when rates are configured)* |
+| Active Income Rate | £/kWh | Rate currently in use; full rate history in the `rate_history` attribute *(only shown when rates are configured)* |
 
-### Per-turbine *(one set per turbine, created dynamically on first data fetch)*
+### Turbine *N* *(one device per turbine, created dynamically on first data fetch)*
 
 | Sensor | Unit | Description |
 |---|---|---|
-| Turbine *N* Generation Today | kWh | Generation for this turbine since midnight |
-| Turbine *N* Status | — | `running` or `stopped` |
-| Turbine *N* Capacity Factor | % | Actual output as a percentage of rated peak capacity |
-| Turbine *N* Availability | % | Percentage of time the turbine was operational (excludes planned/unplanned downtime) |
+| Generation Today | kWh | Generation for this turbine since midnight |
+| Status | — | `running` or `stopped` |
+| Capacity Factor | % | Actual output as a percentage of rated peak capacity |
+| Availability | % | Percentage of time the turbine was operational (excludes planned/unplanned downtime) |
 
 ---
 
