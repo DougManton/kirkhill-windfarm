@@ -59,6 +59,8 @@ Sensors are grouped into separate HA devices so each device page shows a focused
 
 ## Installation via HACS
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=DougManton&repository=kirkhill-windfarm&category=Integration)
+
 1. In Home Assistant open **HACS → Integrations → ⋮ → Custom repositories**.
 2. Add `https://github.com/DougManton/kirkhill-windfarm` as an **Integration**.
 3. Search for **Kirk Hill Wind Farm** and install.
