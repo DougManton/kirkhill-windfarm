@@ -51,9 +51,11 @@ Sensors are grouped into separate HA devices so each device page shows a focused
 
 | Sensor | Unit | Description |
 |---|---|---|
-| Generation Today | kWh | Generation for this turbine since midnight |
-| Status | — | Current operational status (e.g. `active`) |
+| My Generation Today | kWh | Your ownership share of this turbine's generation since midnight |
+| Total Generation Today | kWh | Whole-farm generation from this turbine since midnight |
+| Status | — | `running` or `stopped`, inferred from rotor speed (Unknown if reading is older than 60 minutes) |
 | Capacity Factor | % | Actual output as a percentage of rated peak capacity |
+| Rotor Speed | rpm | Most recent rotor speed reading |
 
 ---
 

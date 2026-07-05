@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -133,8 +133,10 @@ async def async_setup_entry(
         for turbine in coordinator.data.get("turbines", {}).get("turbines", []):
             entities.extend([
                 TurbineGenerationTodaySensor(coordinator, entry, turbine),
+                TurbineSiteGenerationTodaySensor(coordinator, entry, turbine),
                 TurbineStatusSensor(coordinator, entry, turbine),
                 TurbineCapacityFactorSensor(coordinator, entry, turbine),
+                TurbineRotorSpeedSensor(coordinator, entry, turbine),
             ])
 
     async_add_entities(entities)
@@ -543,9 +545,15 @@ class _TurbineBase(KirkhillSensorBase):
                 return t
         return {}
 
+    def _turbine_site_data(self) -> dict[str, Any]:
+        for t in (self.coordinator.data or {}).get("turbines_site", {}).get("turbines", []):
+            if str(t.get("id")) == self._turbine_id:
+                return t
+        return {}
+
 
 class TurbineGenerationTodaySensor(_TurbineBase):
-    _attr_name = "Generation Today"
+    _attr_name = "My Generation Today"
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -571,8 +579,32 @@ class TurbineGenerationTodaySensor(_TurbineBase):
         return {k: t[k] for k in ("share_percent", "latest_interval_end") if k in t}
 
 
+class TurbineSiteGenerationTodaySensor(_TurbineBase):
+    _attr_name = "Total Generation Today"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:wind-turbine"
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        turbine: dict[str, Any],
+    ) -> None:
+        turbine_id = str(turbine.get("id", "unknown"))
+        super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_site_generation_today")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._turbine_site_data().get("generation_kwh")
+        return round(float(val), 2) if val is not None else None
+
+
 class TurbineStatusSensor(_TurbineBase):
     _attr_name = "Status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["running", "stopped"]
     _attr_icon = "mdi:wind-turbine"
 
     def __init__(
@@ -587,11 +619,17 @@ class TurbineStatusSensor(_TurbineBase):
     @property
     def native_value(self) -> str | None:
         t = self._turbine_data()
-        # API returns current_status; fall back to status for compatibility
-        status = t.get("current_status") or t.get("status")
-        if status is None:
+        rpm = t.get("latest_rotor_speed_rpm")
+        ts_str = t.get("latest_rotor_speed_at")
+        if rpm is None or ts_str is None:
             return None
-        return str(status).lower()
+        try:
+            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) - ts > timedelta(minutes=60):
+                return None  # Stale reading — don't infer status
+        except (ValueError, AttributeError):
+            return None
+        return "running" if float(rpm) > 0 else "stopped"
 
 
 class TurbineCapacityFactorSensor(_TurbineBase):
@@ -612,6 +650,27 @@ class TurbineCapacityFactorSensor(_TurbineBase):
     @property
     def native_value(self) -> float | None:
         val = self._turbine_data().get("capacity_factor_percent")
+        return round(float(val), 2) if val is not None else None
+
+
+class TurbineRotorSpeedSensor(_TurbineBase):
+    _attr_name = "Rotor Speed"
+    _attr_native_unit_of_measurement = "rpm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:rotate-right"
+
+    def __init__(
+        self,
+        coordinator: KirkhillCoordinator,
+        entry: ConfigEntry,
+        turbine: dict[str, Any],
+    ) -> None:
+        turbine_id = str(turbine.get("id", "unknown"))
+        super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_rotor_speed")
+
+    @property
+    def native_value(self) -> float | None:
+        val = self._turbine_data().get("latest_rotor_speed_rpm")
         return round(float(val), 2) if val is not None else None
 
 
