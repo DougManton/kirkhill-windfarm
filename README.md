@@ -72,6 +72,19 @@ Sensors are grouped into separate HA devices so each device page shows a focused
 
 Copy `custom_components/kirkhill_windfarm/` into your HA `config/custom_components/` directory and restart.
 
+### Docker installations
+
+The Home Assistant container runs as uid `1000`. If you copy the files as `root` (common with Docker volume mounts), HA cannot read them and the integration will not appear — the tell-tale sign is that a `__pycache__` folder is never created in the `kirkhill_windfarm` directory.
+
+Fix the ownership and permissions after copying, then restart:
+
+```bash
+chown -R 1000:1000 /your/config/path/custom_components/kirkhill_windfarm
+chmod -R 755 /your/config/path/custom_components/kirkhill_windfarm
+```
+
+If you use the `linuxserver/homeassistant` image the uid may differ — check with `docker exec homeassistant id`.
+
 ---
 
 ## Configuration
