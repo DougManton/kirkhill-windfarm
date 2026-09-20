@@ -271,10 +271,10 @@ class CurrentPowerSensor(_SiteBase):
     def extra_state_attributes(self) -> dict[str, Any]:
         site = self._site_summary()
         attrs: dict[str, Any] = {}
-        if "latest_interval_end" in site:
-            attrs["latest_interval_end"] = site["latest_interval_end"]
-        if "latest_import_status" in site:
-            attrs["import_status"] = site["latest_import_status"]
+        for src, dst in (("latest_interval_end", "latest_interval_end"), ("latest_import_status", "import_status")):
+            raw = site.get(src)
+            if raw is not None and (val := str(raw)):
+                attrs[dst] = val
         return attrs
 
 
@@ -583,7 +583,12 @@ class TurbineGenerationTodaySensor(_TurbineBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         t = self._turbine_data()
-        return {k: t[k] for k in ("share_percent", "latest_interval_end") if k in t}
+        attrs: dict[str, Any] = {}
+        if (sp := t.get("share_percent")) is not None:
+            attrs["share_percent"] = sp
+        if (li := t.get("latest_interval_end")) is not None and (s := str(li)):
+            attrs["latest_interval_end"] = s
+        return attrs
 
 
 class TurbineSiteGenerationTodaySensor(_TurbineBase):
@@ -625,16 +630,17 @@ class TurbineStatusSensor(_TurbineBase):
 
     @property
     def native_value(self) -> str | None:
-        return self._turbine_data().get("current_status")
+        val = self._turbine_data().get("current_status")
+        return val if val in self._attr_options else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         t = self._turbine_data()
         attrs: dict[str, Any] = {}
-        if "current_state_text" in t:
-            attrs["state_text"] = t["current_state_text"]
-        if "current_status_started_at" in t:
-            attrs["status_since"] = t["current_status_started_at"]
+        for src, dst in (("current_state_text", "state_text"), ("current_status_started_at", "status_since")):
+            raw = t.get(src)
+            if raw is not None and (val := str(raw)):
+                attrs[dst] = val
         return attrs
 
 

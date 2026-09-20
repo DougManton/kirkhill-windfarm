@@ -413,6 +413,8 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             async with session.get(url, headers=self._headers) as response:
                 response.raise_for_status()
                 body = await response.json()
+                if not isinstance(body, dict):
+                    raise UpdateFailed(f"Unexpected response type from {path}: {type(body).__name__}")
                 meta = _parse_response_meta(response.headers)
                 return body, meta
 
