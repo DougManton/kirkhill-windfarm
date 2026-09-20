@@ -17,6 +17,7 @@ from homeassistant.const import (
     UnitOfSpeed,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -68,26 +69,32 @@ def _site_device_info(entry: ConfigEntry) -> DeviceInfo:
     )
 
 
-def _owner_device_info(entry: ConfigEntry) -> DeviceInfo:
+def _site_device_id(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
+    """Return the device registry ID of the site device, or None if not yet registered."""
+    device = dr.async_get(hass).async_get_device({(DOMAIN, f"{entry.entry_id}_site")})
+    return device.id if device else None
+
+
+def _owner_device_info(hass: HomeAssistant, entry: ConfigEntry) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry.entry_id}_owner")},
         name="Your Share",
         manufacturer="Kirk Hill Community Co-op",
         model="Wind Farm Dashboard",
-        via_device=(DOMAIN, f"{entry.entry_id}_site"),
+        via_device_id=_site_device_id(hass, entry),
         configuration_url="https://dashboard.kirkhillcoop.org",
     )
 
 
 def _turbine_device_info(
-    entry: ConfigEntry, turbine_id: str, turbine_name: str
+    hass: HomeAssistant, entry: ConfigEntry, turbine_id: str, turbine_name: str
 ) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry.entry_id}_turbine_{turbine_id}")},
         name=turbine_name,
         manufacturer="Kirk Hill Community Co-op",
         model="Wind Turbine",
-        via_device=(DOMAIN, f"{entry.entry_id}_site"),
+        via_device_id=_site_device_id(hass, entry),
         configuration_url="https://dashboard.kirkhillcoop.org",
     )
 
@@ -190,7 +197,7 @@ class _OwnerBase(KirkhillSensorBase):
         entry: ConfigEntry,
         unique_suffix: str,
     ) -> None:
-        super().__init__(coordinator, entry, unique_suffix, _owner_device_info(entry))
+        super().__init__(coordinator, entry, unique_suffix, _owner_device_info(coordinator.hass, entry))
 
 
 # ---------------------------------------------------------------------------
@@ -534,7 +541,7 @@ class _TurbineBase(KirkhillSensorBase):
             coordinator,
             entry,
             unique_suffix,
-            _turbine_device_info(entry, turbine_id, turbine_name),
+            _turbine_device_info(coordinator.hass, entry, turbine_id, turbine_name),
         )
         self._turbine_id = turbine_id
         self._turbine_label = turbine_name
