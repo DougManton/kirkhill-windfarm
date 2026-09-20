@@ -179,8 +179,8 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         (
             gen_owner,
             gen_site,
-            gen_owner_today,
-            gen_site_today,
+            cur_owner,
+            cur_site,
             gen_owner_30d,
             gen_site_30d,
             wind_speed,
@@ -189,8 +189,8 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ) = await asyncio.gather(
             self._fetch_with_retry(session, "/api/v1/generation?range=7d"),
             self._fetch_with_retry(session, "/api/v1/generation?range=7d&scope=site"),
-            self._fetch_with_retry(session, "/api/v1/generation?range=today"),
-            self._fetch_with_retry(session, "/api/v1/generation?range=today&scope=site"),
+            self._fetch_with_retry(session, "/api/v1/current"),
+            self._fetch_with_retry(session, "/api/v1/current?scope=site"),
             self._fetch_with_retry(session, "/api/v1/generation?range=30d"),
             self._fetch_with_retry(session, "/api/v1/generation?range=30d&scope=site"),
             self._fetch_with_retry(session, "/api/v1/wind-speed?range=today"),
@@ -242,33 +242,30 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         owner = _unwrap(gen_owner, "generation (owner)")
         site = _unwrap(gen_site, "generation (site)")
-        owner_today = _unwrap(gen_owner_today, "generation today (owner)")
-        site_today = _unwrap(gen_site_today, "generation today (site)")
+        cur = _unwrap(cur_owner, "current (owner)")
+        cur_s = _unwrap(cur_site, "current (site)")
         owner_30d = _unwrap(gen_owner_30d, "generation 30d (owner)")
         site_30d = _unwrap(gen_site_30d, "generation 30d (site)")
         ws = _unwrap(wind_speed, "wind-speed")
         tb = _unwrap(turbines, "turbines")
         tb_site = _unwrap(turbines_site, "turbines (site)")
 
-        # Derive instantaneous power: kWh over 10-min interval × 6 → kW.
-        def _last_interval_kw(series: list[dict]) -> float | None:
-            if not series:
-                return None
-            last_kwh = series[-1].get("kwh")
-            return round(float(last_kwh) * 6, 2) if last_kwh is not None else None
+        def _kw(data: dict, key: str) -> float | None:
+            val = data.get("summary", {}).get(key)
+            return round(float(val), 2) if val is not None else None
 
         return {
             "owner": owner,
             "site": site,
-            "owner_today": owner_today,
-            "site_today": site_today,
+            "current": cur,
+            "current_site": cur_s,
             "owner_30d": owner_30d,
             "site_30d": site_30d,
             "wind_speed": ws,
             "turbines": tb,
             "turbines_site": tb_site,
-            "current_power_kw": _last_interval_kw(site.get("generation_series", [])),
-            "current_owner_power_kw": _last_interval_kw(owner.get("generation_series", [])),
+            "current_power_kw": _kw(cur_s, "total_power_kw"),
+            "current_owner_power_kw": _kw(cur, "total_power_kw"),
         }
 
     # ------------------------------------------------------------------

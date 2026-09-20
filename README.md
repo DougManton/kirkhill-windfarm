@@ -53,7 +53,7 @@ Sensors are grouped into separate HA devices so each device page shows a focused
 |---|---|---|
 | My Generation Today | kWh | Your ownership share of this turbine's generation since midnight |
 | Total Generation Today | kWh | Whole-farm generation from this turbine since midnight |
-| Status | — | `active`, `inactive`, or `maintenance` as reported by the API; `state_text` and `status_since` available as extra attributes |
+| Status | — | `active`, `inactive`, or `unknown` as reported by the API; `state_text` and `status_since` available as extra attributes |
 | Capacity Factor | % | Actual output as a percentage of rated peak capacity |
 | Rotor Speed | rpm | Most recent rotor speed reading |
 
@@ -117,7 +117,7 @@ The **Active Income Rate** sensor's `rate_history` attribute lists the full chro
 
 The integration polls all endpoints every **5 minutes** (±30 seconds of randomised jitter — see [Fleet deployments](#fleet-deployments) below).
 
-Current power output is not a direct API field. It is derived from the most recent interval in the `generation_series`: `kwh × 6 = instantaneous kW`.
+Current power output is read directly from the `total_power_kw` field returned by `/api/v1/current`.
 
 ### Retry on transient errors
 
@@ -150,31 +150,66 @@ When many HA instances restart simultaneously (power cut, co-ordinated update) t
 
 All responses follow the envelope `{"data": {…}}`. The integration strips the outer `data` wrapper before using the payload.
 
+### Current (`/api/v1/current`)
+
+Real-time snapshot — used for instantaneous power, wind speed, today's generation total, and per-turbine status.
+
+```json
+// GET /api/v1/current  (owner-scoped by default)
+{
+  "data": {
+    "summary": {
+      "total_power_kw": 1.655,
+      "wind_speed_mps": 9.14,
+      "capacity_factor_percent": 59.96,
+      "active_turbines": 8,
+      "inactive_turbines": 0,
+      "unknown_turbines": 0,
+      "total_turbines": 8,
+      "total_generation_kwh_today": 38.272,
+      "latest_power_at": "2026-09-20T15:20:00Z"
+    },
+    "turbines": [
+      {
+        "id": "T1",
+        "status": "active",
+        "power_kw": 0.253,
+        "wind_speed_mps": 9.9,
+        "capacity_factor_percent": 73.32,
+        "status_started_at": "2026-09-13T07:44:14Z",
+        "state_text": "Turbine in operation"
+      }
+    ]
+  }
+}
+```
+
+Adding `&scope=site` returns whole-farm totals.
+
 ### Generation (`/api/v1/generation`)
 
 ```json
-// GET /api/v1/generation?range=7d  (owner-scoped by default)
+// GET /api/v1/generation?range=today  (owner-scoped by default)
 {
   "data": {
     "window": {
-      "range": "7d",
-      "from": "2026-06-24T23:00:00Z",
-      "to": "2026-07-01T10:44:00Z",
-      "bucket": "10m",
-      "scope": "owner",
-      "timezone": "Europe/London"
+      "range": "today",
+      "from": "2026-09-19T23:00:00Z",
+      "to": "2026-09-20T15:29:00Z",
+      "bucket": "1m",
+      "scope": "owner"
     },
     "summary": {
-      "total_kwh": 149.1,
-      "capacity_factor_percent": 34.68,
+      "total_generation_kwh": 38.13,
+      "capacity_factor_percent": 85.23,
       "active_turbines": 8,
-      "site_capacity_watts": 18800000,
-      "latest_interval_end": "2026-07-01T10:20:00Z",
-      "latest_import_status": "running"
+      "capacity_watts": 2760.387,
+      "latest_generation_interval_end": "2026-09-20T15:12:00Z",
+      "latest_import_status": "success"
     },
-    "generation_series": [
-      {"timestamp": "2026-06-24T23:00:00Z", "kwh": 0.0},
-      {"timestamp": "2026-06-24T23:10:00Z", "kwh": 0.461}
+    "series": [
+      {"timestamp": "2026-09-19T23:00:00Z", "generation_kwh": 0.046},
+      {"timestamp": "2026-09-19T23:01:00Z", "generation_kwh": 0.045}
     ]
   }
 }
@@ -188,9 +223,9 @@ Adding `&scope=site` returns the same structure with whole-farm totals. Supporte
 // GET /api/v1/wind-speed?range=today
 {
   "data": {
-    "wind_speed_series": [
-      {"timestamp": "2026-07-01T00:00:00Z", "ms": 6.4},
-      {"timestamp": "2026-07-01T00:01:00Z", "ms": 6.7}
+    "series": [
+      {"timestamp": "2026-09-19T23:00:00Z", "wind_speed_mps": 12.51},
+      {"timestamp": "2026-09-19T23:01:00Z", "wind_speed_mps": 12.23}
     ]
   }
 }
@@ -204,21 +239,18 @@ Adding `&scope=site` returns the same structure with whole-farm totals. Supporte
   "data": {
     "turbines": [
       {
-        "label": "T1",
-        "energy_kwh": 33220,
-        "share_percent": 13.24,
-        "capacity_factor_percent": 91.5,
-        "capacity_watts": 2350000,
-        "latest_interval_end": "2026-09-20T14:27:00Z",
-        "latest_rpm": 15.37,
-        "latest_rpm_at": "2026-09-20T14:27:00Z",
-        "current_status": "active",
-        "current_status_started_at": "2026-09-13T07:44:14Z",
-        "current_state_text": "Turbine in operation"
+        "id": "T1",
+        "generation_kwh": 5.052,
+        "generation_share_percent": 13.26,
+        "capacity_factor_percent": 90.47,
+        "capacity_watts": 345.048375,
+        "latest_generation_interval_end": "2026-09-20T15:11:00Z",
+        "latest_rotor_speed_rpm": 14.72,
+        "latest_rotor_speed_at": "2026-09-20T15:11:00Z"
       }
     ]
   }
 }
 ```
 
-Turbines are identified by `label` (e.g. `T1`–`T8`). Adding `&scope=site` returns whole-farm generation figures per turbine.
+Turbines are identified by `id` (e.g. `T1`–`T8`). Adding `&scope=site` returns whole-farm generation figures per turbine.
