@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -17,6 +17,7 @@ from homeassistant.const import (
     UnitOfSpeed,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -68,26 +69,32 @@ def _site_device_info(entry: ConfigEntry) -> DeviceInfo:
     )
 
 
-def _owner_device_info(entry: ConfigEntry) -> DeviceInfo:
+def _site_device_id(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
+    """Return the device registry ID of the site device, or None if not yet registered."""
+    device = dr.async_get(hass).async_get_device({(DOMAIN, f"{entry.entry_id}_site")})
+    return device.id if device else None
+
+
+def _owner_device_info(hass: HomeAssistant, entry: ConfigEntry) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry.entry_id}_owner")},
         name="Your Share",
         manufacturer="Kirk Hill Community Co-op",
         model="Wind Farm Dashboard",
-        via_device=(DOMAIN, f"{entry.entry_id}_site"),
+        via_device_id=_site_device_id(hass, entry),
         configuration_url="https://dashboard.kirkhillcoop.org",
     )
 
 
 def _turbine_device_info(
-    entry: ConfigEntry, turbine_id: str, turbine_name: str
+    hass: HomeAssistant, entry: ConfigEntry, turbine_id: str, turbine_name: str
 ) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry.entry_id}_turbine_{turbine_id}")},
         name=turbine_name,
         manufacturer="Kirk Hill Community Co-op",
         model="Wind Turbine",
-        via_device=(DOMAIN, f"{entry.entry_id}_site"),
+        via_device_id=_site_device_id(hass, entry),
         configuration_url="https://dashboard.kirkhillcoop.org",
     )
 
@@ -190,7 +197,7 @@ class _OwnerBase(KirkhillSensorBase):
         entry: ConfigEntry,
         unique_suffix: str,
     ) -> None:
-        super().__init__(coordinator, entry, unique_suffix, _owner_device_info(entry))
+        super().__init__(coordinator, entry, unique_suffix, _owner_device_info(coordinator.hass, entry))
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +217,7 @@ class SiteGenerationTodaySensor(_SiteBase):
 
     @property
     def native_value(self) -> float | None:
-        val = (self.coordinator.data or {}).get("site_today", {}).get("summary", {}).get("total_generation_kwh")
+        val = (self.coordinator.data or {}).get("site_today", {}).get("summary", {}).get("total_kwh")
         return round(float(val), 1) if val is not None else None
 
 
@@ -226,7 +233,7 @@ class SiteGenerationSensor(_SiteBase):
 
     @property
     def native_value(self) -> float | None:
-        val = self._site_summary().get("total_generation_kwh")
+        val = self._site_summary().get("total_kwh")
         return round(float(val), 1) if val is not None else None
 
 
@@ -242,7 +249,7 @@ class SiteGeneration30dSensor(_SiteBase):
 
     @property
     def native_value(self) -> float | None:
-        val = (self.coordinator.data or {}).get("site_30d", {}).get("summary", {}).get("total_generation_kwh")
+        val = (self.coordinator.data or {}).get("site_30d", {}).get("summary", {}).get("total_kwh")
         return round(float(val), 1) if val is not None else None
 
 
@@ -264,10 +271,10 @@ class CurrentPowerSensor(_SiteBase):
     def extra_state_attributes(self) -> dict[str, Any]:
         site = self._site_summary()
         attrs: dict[str, Any] = {}
-        if "latest_generation_interval_end" in site:
-            attrs["latest_interval_end"] = site["latest_generation_interval_end"]
-        if "latest_import_status" in site:
-            attrs["import_status"] = site["latest_import_status"]
+        for src, dst in (("latest_interval_end", "latest_interval_end"), ("latest_import_status", "import_status")):
+            raw = site.get(src)
+            if raw is not None and (val := str(raw)):
+                attrs[dst] = val
         return attrs
 
 
@@ -319,10 +326,10 @@ class WindSpeedCurrentSensor(_SiteBase):
 
     @property
     def native_value(self) -> float | None:
-        series = (self.coordinator.data or {}).get("wind_speed", {}).get("series", [])
+        series = (self.coordinator.data or {}).get("wind_speed", {}).get("wind_speed_series", [])
         if not series:
             return None
-        val = series[-1].get("wind_speed_mps")
+        val = series[-1].get("ms")
         return round(float(val), 2) if val is not None else None
 
 
@@ -337,8 +344,8 @@ class WindSpeedAverageSensor(_SiteBase):
 
     @property
     def native_value(self) -> float | None:
-        series = (self.coordinator.data or {}).get("wind_speed", {}).get("series", [])
-        values = [e["wind_speed_mps"] for e in series if "wind_speed_mps" in e]
+        series = (self.coordinator.data or {}).get("wind_speed", {}).get("wind_speed_series", [])
+        values = [e["ms"] for e in series if "ms" in e]
         if not values:
             return None
         return round(sum(values) / len(values), 2)
@@ -361,7 +368,7 @@ class OwnerGenerationTodaySensor(_OwnerBase):
 
     @property
     def native_value(self) -> float | None:
-        val = (self.coordinator.data or {}).get("owner_today", {}).get("summary", {}).get("total_generation_kwh")
+        val = (self.coordinator.data or {}).get("owner_today", {}).get("summary", {}).get("total_kwh")
         return round(float(val), 3) if val is not None else None
 
 
@@ -377,7 +384,7 @@ class OwnerGenerationSensor(_OwnerBase):
 
     @property
     def native_value(self) -> float | None:
-        val = self._owner_summary().get("total_generation_kwh")
+        val = self._owner_summary().get("total_kwh")
         return round(float(val), 3) if val is not None else None
 
 
@@ -393,7 +400,7 @@ class OwnerGeneration30dSensor(_OwnerBase):
 
     @property
     def native_value(self) -> float | None:
-        val = (self.coordinator.data or {}).get("owner_30d", {}).get("summary", {}).get("total_generation_kwh")
+        val = (self.coordinator.data or {}).get("owner_30d", {}).get("summary", {}).get("total_kwh")
         return round(float(val), 3) if val is not None else None
 
 
@@ -424,8 +431,8 @@ class OwnerShareSensor(_OwnerBase):
     @property
     def native_value(self) -> float | None:
         data = self.coordinator.data or {}
-        owner_kwh = data.get("owner", {}).get("summary", {}).get("total_generation_kwh")
-        site_kwh = data.get("site", {}).get("summary", {}).get("total_generation_kwh")
+        owner_kwh = data.get("owner", {}).get("summary", {}).get("total_kwh")
+        site_kwh = data.get("site", {}).get("summary", {}).get("total_kwh")
         if not owner_kwh or not site_kwh:
             return None
         return round(float(owner_kwh) / float(site_kwh) * 100, 4)
@@ -443,7 +450,7 @@ class OwnerRevenueTodaySensor(_OwnerBase):
 
     @property
     def native_value(self) -> float | None:
-        owner_kwh = (self.coordinator.data or {}).get("owner_today", {}).get("summary", {}).get("total_generation_kwh")
+        owner_kwh = (self.coordinator.data or {}).get("owner_today", {}).get("summary", {}).get("total_kwh")
         if owner_kwh is None:
             return None
         rate = get_applicable_rate(self._income_rates, date.today())
@@ -469,7 +476,7 @@ class OwnerRevenueSensor(_OwnerBase):
 
     @property
     def native_value(self) -> float | None:
-        owner_kwh = self._owner_summary().get("total_generation_kwh")
+        owner_kwh = self._owner_summary().get("total_kwh")
         if owner_kwh is None:
             return None
         period_start = date.today() - timedelta(days=7)
@@ -528,26 +535,26 @@ class _TurbineBase(KirkhillSensorBase):
         turbine: dict[str, Any],
         unique_suffix: str,
     ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
-        turbine_name = turbine.get("name", f"Turbine {turbine_id}")
+        turbine_id = str(turbine.get("label", "unknown"))
+        turbine_name = turbine.get("label", f"Turbine {turbine_id}")
         super().__init__(
             coordinator,
             entry,
             unique_suffix,
-            _turbine_device_info(entry, turbine_id, turbine_name),
+            _turbine_device_info(coordinator.hass, entry, turbine_id, turbine_name),
         )
         self._turbine_id = turbine_id
         self._turbine_label = turbine_name
 
     def _turbine_data(self) -> dict[str, Any]:
         for t in (self.coordinator.data or {}).get("turbines", {}).get("turbines", []):
-            if str(t.get("id")) == self._turbine_id:
+            if str(t.get("label")) == self._turbine_id:
                 return t
         return {}
 
     def _turbine_site_data(self) -> dict[str, Any]:
         for t in (self.coordinator.data or {}).get("turbines_site", {}).get("turbines", []):
-            if str(t.get("id")) == self._turbine_id:
+            if str(t.get("label")) == self._turbine_id:
                 return t
         return {}
 
@@ -565,18 +572,23 @@ class TurbineGenerationTodaySensor(_TurbineBase):
         entry: ConfigEntry,
         turbine: dict[str, Any],
     ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
+        turbine_id = str(turbine.get("label", "unknown"))
         super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_generation_today")
 
     @property
     def native_value(self) -> float | None:
-        val = self._turbine_data().get("generation_kwh")
+        val = self._turbine_data().get("energy_kwh")
         return round(float(val), 2) if val is not None else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         t = self._turbine_data()
-        return {k: t[k] for k in ("share_percent", "latest_interval_end") if k in t}
+        attrs: dict[str, Any] = {}
+        if (sp := t.get("share_percent")) is not None:
+            attrs["share_percent"] = sp
+        if (li := t.get("latest_interval_end")) is not None and (s := str(li)):
+            attrs["latest_interval_end"] = s
+        return attrs
 
 
 class TurbineSiteGenerationTodaySensor(_TurbineBase):
@@ -592,19 +604,19 @@ class TurbineSiteGenerationTodaySensor(_TurbineBase):
         entry: ConfigEntry,
         turbine: dict[str, Any],
     ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
+        turbine_id = str(turbine.get("label", "unknown"))
         super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_site_generation_today")
 
     @property
     def native_value(self) -> float | None:
-        val = self._turbine_site_data().get("generation_kwh")
+        val = self._turbine_site_data().get("energy_kwh")
         return round(float(val), 2) if val is not None else None
 
 
 class TurbineStatusSensor(_TurbineBase):
     _attr_name = "Status"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["running", "stopped"]
+    _attr_options = ["active", "inactive", "maintenance"]
     _attr_icon = "mdi:wind-turbine"
 
     def __init__(
@@ -613,23 +625,23 @@ class TurbineStatusSensor(_TurbineBase):
         entry: ConfigEntry,
         turbine: dict[str, Any],
     ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
+        turbine_id = str(turbine.get("label", "unknown"))
         super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_status")
 
     @property
     def native_value(self) -> str | None:
+        val = self._turbine_data().get("current_status")
+        return val if val in self._attr_options else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
         t = self._turbine_data()
-        rpm = t.get("latest_rotor_speed_rpm")
-        ts_str = t.get("latest_rotor_speed_at")
-        if rpm is None or ts_str is None:
-            return None
-        try:
-            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) - ts > timedelta(minutes=60):
-                return None  # Stale reading — don't infer status
-        except (ValueError, AttributeError):
-            return None
-        return "running" if float(rpm) > 0 else "stopped"
+        attrs: dict[str, Any] = {}
+        for src, dst in (("current_state_text", "state_text"), ("current_status_started_at", "status_since")):
+            raw = t.get(src)
+            if raw is not None and (val := str(raw)):
+                attrs[dst] = val
+        return attrs
 
 
 class TurbineCapacityFactorSensor(_TurbineBase):
@@ -644,7 +656,7 @@ class TurbineCapacityFactorSensor(_TurbineBase):
         entry: ConfigEntry,
         turbine: dict[str, Any],
     ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
+        turbine_id = str(turbine.get("label", "unknown"))
         super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_capacity_factor")
 
     @property
@@ -665,12 +677,12 @@ class TurbineRotorSpeedSensor(_TurbineBase):
         entry: ConfigEntry,
         turbine: dict[str, Any],
     ) -> None:
-        turbine_id = str(turbine.get("id", "unknown"))
+        turbine_id = str(turbine.get("label", "unknown"))
         super().__init__(coordinator, entry, turbine, f"turbine_{turbine_id}_rotor_speed")
 
     @property
     def native_value(self) -> float | None:
-        val = self._turbine_data().get("latest_rotor_speed_rpm")
+        val = self._turbine_data().get("latest_rpm")
         return round(float(val), 2) if val is not None else None
 
 

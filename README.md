@@ -53,7 +53,7 @@ Sensors are grouped into separate HA devices so each device page shows a focused
 |---|---|---|
 | My Generation Today | kWh | Your ownership share of this turbine's generation since midnight |
 | Total Generation Today | kWh | Whole-farm generation from this turbine since midnight |
-| Status | — | `running` or `stopped`, inferred from rotor speed (Unknown if reading is older than 60 minutes) |
+| Status | — | `active`, `inactive`, or `maintenance` as reported by the API; `state_text` and `status_since` available as extra attributes |
 | Capacity Factor | % | Actual output as a percentage of rated peak capacity |
 | Rotor Speed | rpm | Most recent rotor speed reading |
 
@@ -117,7 +117,7 @@ The **Active Income Rate** sensor's `rate_history` attribute lists the full chro
 
 The integration polls all endpoints every **5 minutes** (±30 seconds of randomised jitter — see [Fleet deployments](#fleet-deployments) below).
 
-Current power output is not a direct API field. It is derived from the most recent 10-minute generation interval: `generation_kwh × 6 = instantaneous kW`.
+Current power output is not a direct API field. It is derived from the most recent interval in the `generation_series`: `kwh × 6 = instantaneous kW`.
 
 ### Retry on transient errors
 
@@ -132,7 +132,7 @@ The API uses a rolling request quota reported via `X-Ratelimit-Limit` and `X-Rat
 - If `Retry-After` exceeds 30 seconds (or is absent), requests are suppressed for the full duration (defaulting to 5 minutes if no header is present). Sensors will show **Unavailable** until the ban lifts.
 
 **Proactive (low-water guard):**
-- After each update cycle the integration checks the minimum `X-Ratelimit-Remaining` value seen across all four endpoints. If the remaining count drops below **8**, fetches are paused for **60 seconds**.
+- After each update cycle the integration checks the minimum `X-Ratelimit-Remaining` value seen across all endpoints. If the remaining count drops below **8**, fetches are paused for **60 seconds**.
 - During a proactive pause the previous data is returned unchanged, so sensors remain valid and no error is shown in the HA UI.
 - The pause is cleared automatically once the quota recovers.
 
@@ -148,7 +148,9 @@ When many HA instances restart simultaneously (power cut, co-ordinated update) t
 
 ## API response structure
 
-All responses follow the envelope `{"data": {"window": {…}, "summary": {…}, "series": […]}}`. The integration strips the outer `data` wrapper before using the payload.
+All responses follow the envelope `{"data": {…}}`. The integration strips the outer `data` wrapper before using the payload.
+
+### Generation (`/api/v1/generation`)
 
 ```json
 // GET /api/v1/generation?range=7d  (owner-scoped by default)
@@ -163,19 +165,60 @@ All responses follow the envelope `{"data": {"window": {…}, "summary": {…}, 
       "timezone": "Europe/London"
     },
     "summary": {
-      "total_generation_kwh": 149.1,
+      "total_kwh": 149.1,
       "capacity_factor_percent": 34.68,
       "active_turbines": 8,
       "site_capacity_watts": 18800000,
-      "latest_generation_interval_end": "2026-07-01T10:20:00Z",
+      "latest_interval_end": "2026-07-01T10:20:00Z",
       "latest_import_status": "running"
     },
-    "series": [
-      {"timestamp": "2026-06-24T23:00:00Z", "generation_kwh": 0.0},
-      {"timestamp": "2026-06-24T23:10:00Z", "generation_kwh": 0.461}
+    "generation_series": [
+      {"timestamp": "2026-06-24T23:00:00Z", "kwh": 0.0},
+      {"timestamp": "2026-06-24T23:10:00Z", "kwh": 0.461}
     ]
   }
 }
 ```
 
-Adding `&scope=site` to the generation endpoint returns the same structure with whole-farm totals instead of owner-scoped figures.
+Adding `&scope=site` returns the same structure with whole-farm totals. Supported `range` values: `today`, `7d`, `30d`.
+
+### Wind speed (`/api/v1/wind-speed`)
+
+```json
+// GET /api/v1/wind-speed?range=today
+{
+  "data": {
+    "wind_speed_series": [
+      {"timestamp": "2026-07-01T00:00:00Z", "ms": 6.4},
+      {"timestamp": "2026-07-01T00:01:00Z", "ms": 6.7}
+    ]
+  }
+}
+```
+
+### Turbines (`/api/v1/turbines`)
+
+```json
+// GET /api/v1/turbines?range=today
+{
+  "data": {
+    "turbines": [
+      {
+        "label": "T1",
+        "energy_kwh": 33220,
+        "share_percent": 13.24,
+        "capacity_factor_percent": 91.5,
+        "capacity_watts": 2350000,
+        "latest_interval_end": "2026-09-20T14:27:00Z",
+        "latest_rpm": 15.37,
+        "latest_rpm_at": "2026-09-20T14:27:00Z",
+        "current_status": "active",
+        "current_status_started_at": "2026-09-13T07:44:14Z",
+        "current_state_text": "Turbine in operation"
+      }
+    ]
+  }
+}
+```
+
+Turbines are identified by `label` (e.g. `T1`–`T8`). Adding `&scope=site` returns whole-farm generation figures per turbine.

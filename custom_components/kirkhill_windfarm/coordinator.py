@@ -254,7 +254,7 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         def _last_interval_kw(series: list[dict]) -> float | None:
             if not series:
                 return None
-            last_kwh = series[-1].get("generation_kwh")
+            last_kwh = series[-1].get("kwh")
             return round(float(last_kwh) * 6, 2) if last_kwh is not None else None
 
         return {
@@ -267,8 +267,8 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "wind_speed": ws,
             "turbines": tb,
             "turbines_site": tb_site,
-            "current_power_kw": _last_interval_kw(site.get("series", [])),
-            "current_owner_power_kw": _last_interval_kw(owner.get("series", [])),
+            "current_power_kw": _last_interval_kw(site.get("generation_series", [])),
+            "current_owner_power_kw": _last_interval_kw(owner.get("generation_series", [])),
         }
 
     # ------------------------------------------------------------------
@@ -413,6 +413,8 @@ class KirkhillCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             async with session.get(url, headers=self._headers) as response:
                 response.raise_for_status()
                 body = await response.json()
+                if not isinstance(body, dict):
+                    raise UpdateFailed(f"Unexpected response type from {path}: {type(body).__name__}")
                 meta = _parse_response_meta(response.headers)
                 return body, meta
 
