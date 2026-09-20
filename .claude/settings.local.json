@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:data-v2.hacs.xyz)",
-      "WebFetch(domain:hacs.xyz)"
+      "WebFetch(domain:hacs.xyz)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
